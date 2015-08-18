@@ -1,0 +1,401 @@
+Credit Score Analysis
+========================================================
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring web pages (click the **MD** toolbar button for help on Markdown).
+
+When you click the **Knit HTML** button a web page will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+### Load libraries
+```{r}
+
+```
+----
+####Data Processing
+
+Download the data, and read it into R. 
+```{r setdir,cache=TRUE}
+
+root<-"C:/Users/Joseph/Documents/My Dropbox/"
+method<-NULL
+#use for mac.
+root<-"/Users/josephelliott/Dropbox/"
+method<-"curl"
+setwd(paste0(root,"Data Analysis/Assignments/Assignment 1/Data"))
+getwd()
+
+```
+
+``` {r downloadData }
+download.file("https://spark-public.s3.amazonaws.com/dataanalysis/loansData.csv",destfile="loansData.csv",method=method)
+dateDownloaded <- date()
+dateDownloaded
+save(rawLoans,dateDownloaded,file="loansDataRaw.rda")
+```
+
+``` {r loadData, dependson="setdir"}
+parDefault<-par()
+rawLoans<-read.csv("loansData.csv")
+
+
+```
+
+### Look at the data set
+
+```{r, dependson="loadData"}
+dim(rawLoans) #look at size
+dimnames(rawLoans) #look at variable names
+head(rawLoans)  #a quick glance at raw data
+summary(rawLoans) #a summary 
+sapply(rawLoans[1,],class) #what type of variables here (char, int, numeric, factor?)
+```
+
+### Find out about missing values
+```{r, dependson="loadData"}
+sum(is.na(rawLoans))
+```
+
+###Let's create a cleaned data set.
+###Need to make interest rate and FICO into numeric variables instead of factors
+
+```{r cleanData, dependson="loadData"}
+cleanLoans<-rawLoans
+cleanLoans<-subset(cleanLoans,select = -FICO.Range)
+cleanLoans$Interest.Rate<-as.numeric(sub("%","",rawLoans$Interest.Rate))/100
+cleanLoans$Debt.To.Income.Ratio<-as.numeric(sub("%","",rawLoans$Debt.To.Income.Ratio))/100
+firstElement<-function(x){x[1]}
+secondElement<-function(x){x[2]}
+splitFico <-strsplit(as.character(rawLoans$FICO.Range), "-")
+minFico<-as.numeric(sapply(splitFico,firstElement))
+maxFico<-as.numeric(sapply(splitFico,secondElement))
+meanFun<-function(x1,x2){(x1+x2)/2}
+cleanLoans$Average.FICO<-meanFun(maxFico, minFico)
+#Clean the employment levels to numeric - sert <1 year and n/a to zero
+
+#get rid of NA values by removing the bad observations
+cleanLoans<-na.omit(cleanLoans)
+```
+Made FICO into avg
+Made percents into numeric <1
+Made employment length into number, assume <1 year= 1 year, 10+ years=10 years
+
+###Exploratory Graphs
+
+###Take a look a frequency
+
+```{r}
+par(mfrow=c(1,2))
+hist(cleanLoans$Interest.Rate,breaks=50)
+hist(log10(cleanLoans$Interest.Rate+1),breaks=50)
+quantile(cleanLoans$Interest.Rate)
+
+hist(cleanLoans$Amount.Requested,breaks=50)
+hist(log10(cleanLoans$Amount.Requested+1),breaks=50)
+quantile(cleanLoans$Amount.Requested)
+
+hist(cleanLoans$Amount.Funded,breaks=50)
+hist(log10(cleanLoans$Amount.Funded+1),breaks=50)
+quantile(cleanLoans$Amount.Funded)
+
+hist(cleanLoans$Debt.To.Income.Ratio,breaks=50)
+hist(log10(cleanLoans$Debt.To.Income.Ratio),breaks=50)
+quantile(cleanLoans$Debt.To.Income.Ratio, na.rm=TRUE)
+
+hist(cleanLoans$Monthly.Income,breaks=50)
+hist(log10(cleanLoans$Monthly.Income+1),breaks=50)
+quantile(cleanLoans$Monthly.Income, na.rm=TRUE)
+
+
+hist(cleanLoans$Average.FICO, breaks=50)
+hist(log10(cleanLoans$Average.FICO+1),breaks=50)
+quantile(cleanLoans$Average.FICO)
+
+
+
+hist(cleanLoans$Revolving.CREDIT.Balance)
+hist(log10(cleanLoans$Revolving.CREDIT.Balance+1),breaks=50)
+quantile(cleanLoans$Revolving.CREDIT.Balance, na.rm=TRUE)
+
+
+hist(cleanLoans$Open.CREDIT.Lines)
+hist(log10(cleanLoans$Open.CREDIT.Lines+1),breaks=50)
+quantile(cleanLoans$Open.CREDIT.Lines, na.rm=TRUE)
+```
+Interest Rate -bimodal distribution
+Amount Requested - Skewed right
+Debt to Income - Normal about 0.15
+Average FICO - Nearly none below 670, skewed strong lright
+Monthly Income - right skewed, probably outliers
+Open credit lines is right skewed
+maybe we need to do some log transforms for revolving credit balance, monthly income,
+and amount requested
+
+```{r transforms}
+cleanLoans$Monthly.Income.Log<-log10(cleanLoans$Monthly.Income+1)
+cleanLoans$Revolving.CREDIT.Balance.Log<-log10(cleanLoans$Revolving.CREDIT.Balance +1)
+cleanLoans$Amount.Requested.Log<-log10(cleanLoans$Amount.Requested+1)
+cleanLoans$Amount.Funded.Log<-log10(cleanLoans$Amount.Requested+1)
+cleanLoans$Open.CREDIT.Lines.Log<-log10(cleanLoans$Open.CREDIT.Lines+1)
+```
+
+
+###Some scatter plots to try and explain trends
+
+```{r}
+par(mfrow=c(1,1))
+boxplot(cleanLoans$Interest.Rate)
+
+#Factor variables
+#employment length
+plot(cleanLoans$Employment.Length,cleanLoans$Interest.Rate,pch=19,col="blue",xaxt="n")
+axis(side=1,at=unique(as.numeric(cleanLoans$Employment.Length)),labels=unique(cleanLoans$Employment.Length))
+plot(cleanLoans$Interest.Rate~jitter(as.numeric(cleanLoans$Employment.Length)),pch=19,col="blue",xaxt="n")
+axis(side=1,at=unique(as.numeric(cleanLoans$Employment.Length)),labels=unique(cleanLoans$Employment.Length))
+
+#Home ownership
+plot(cleanLoans$Home.Ownership,cleanLoans$Interest.Rate,pch=19,col="blue",xaxt="n")
+axis(side=1,at=unique(as.numeric(cleanLoans$Home.Ownership)),labels=unique(cleanLoans$Home.Ownership))
+plot(cleanLoans$Interest.Rate~jitter(as.numeric(cleanLoans$Home.Ownership)),pch=19,col="blue",xaxt="n")
+axis(side=1,at=unique(as.numeric(cleanLoans$Home.Ownership)),labels=unique(cleanLoans$Home.Ownership))
+par(mfrow=c(2,1))
+
+#Loan Purpose
+plot(cleanLoans$Loan.Purpose,cleanLoans$Interest.Rate,pch=19,col="blue",xaxt="n")
+axis(side=1,at=unique(as.numeric(cleanLoans$Loan.Purpose)),labels=unique(cleanLoans$Loan.Purpose))
+plot(cleanLoans$Interest.Rate~jitter(as.numeric(cleanLoans$Loan.Purpose)),pch=19,col="blue",xaxt="n")
+axis(side=1,at=unique(as.numeric(cleanLoans$Loan.Purpose)),labels=unique(cleanLoans$Loan.Purpose))
+
+#Continous variables (numerics)
+#FICO score
+par(mfrow=c(1,1))
+plot(cleanLoans$Average.FICO, cleanLoans$Interest.Rate, pch=19,col="blue", cex=0.5)
+
+#Amount Requested, amount funded
+par(mfrow=c(1,2))
+plot(log10(cleanLoans$Amount.Requested.Log), cleanLoans$Interest.Rate, pch=19,col="blue", cex=0.5)
+plot(log10(cleanLoans$Amount.Funded.Log), cleanLoans$Interest.Rate, pch=19,col="blue", cex=0.5)
+
+
+#debt to income, monthly income
+par(mfrow=c(1,2))
+plot(cleanLoans$Debt.To.Income.Ratio, cleanLoans$Interest.Rate, pch=19, col="blue",cex=0.5)
+plot(cleanLoans$Monthly.Income.Log, cleanLoans$Interest.Rate, pch=19, col="blue", cex=0.5)
+
+#Loan Length
+plot(cleanLoans$Revolving.CREDIT.Balance.Log,cleanLoans$Interest.Rate, pch=19, col="blue",cex=0.5)
+plot(cleanLoans$Open.CREDIT.Lines.Log,cleanLoans$InterestRate,pch=19,col="blue",cex=0.5)
+
+#States
+par(mfrow=c(1,1))
+boxplot(cleanLoans$Interest.Rate ~ cleanLoans$Loan.Length, col=c("blue","grey"),name=levels(cleanLoans$Loan.Length), ylab = "Interest Rate")
+quantile(cleanLoans[as.numeric(cleanLoans$Loan.Length)==1,]$Interest.Rate)
+quantile(cleanLoans[as.numeric(cleanLoans$Loan.Length)==2,]$Interest.Rate)
+stateAvgInterestRate<- tapply(cleanLoans$Interest.Rate, cleanLoans$State, mean)
+barplot(stateAvgInterestRate)
+
+par(cex.axis=0.5)
+plot(cleanLoans$State,cleanLoans$Interest.Rate,pch=19,col="blue",xaxt="n")
+axis(side=1,at=unique(as.numeric(cleanLoans$State)),labels=unique(cleanLoans$State))
+
+plot(cleanLoans$Interest.Rate~as.numeric(cleanLoans$State),pch=19,col="blue",xaxt="n")
+axis(side=1,at=unique(as.numeric(cleanLoans$State)),labels=unique(cleanLoans$State))
+```
+More exploratory plots.
+Interest Rate median 0.1311, some outliers at top level
+Linear (negative) trend between interest rate and FICO
+perhaps a small pos trend on Amount Requested. 
+maybe also a weak trend on Debt.to.income ratio
+also a difference for loan purpose. 
+
+Definitely a higher interest rate in 60 month loan term than 36 months. 
+State average Interest Rate more or less the same with a few exceptions, but we don't know sample size. 
+no difference in interest rate with employment length or home ownership. 
+
+###More scatter plots including factor variables
+```{r}
+plot(cleanLoans$Average.FICO,cleanLoans$Interest.Rate,pch=19, cex=1, col=cleanLoans$Loan.Length)
+legend(800,0.20,legend=levels(cleanLoans$Loan.Length),col=c("black","red"),pch=c(19,19),cex=c(0.6,0.6))
+#probably need a sample here.
+sampledLoans <- cleanLoans[sample(nrow(cleanLoans),size=500,replace=FALSE),]
+plot(jitter(sampledLoans$Average.FICO),sampledLoans$Interest.Rate,pch=19, col=sampledLoans$Home.Ownership)
+
+plot(jitter(sampledLoans$Average.FICO),sampledLoans$Interest.Rate,pch=19, col=sampledLoans$Loan.Purpose)
+plot(jitter(sampledLoans$Average.FICO),sampledLoans$Interest.Rate,col=sampledLoans$Employment.Length,pch=19, cex=1)
+plot(jitter(sampledLoans$Average.FICO),sampledLoans$Interest.Rate,col=sampledLoans$Open.CREDIT.Lines,pch=19, cex=1)
+plot(jitter(sampledLoans$Average.FICO),sampledLoans$Interest.Rate,col=sampledLoans$Inquiries.in.the.Last.6.Months,pch=19, cex=1)
+```
+Not much to tell from state colored scatter, or employment length, or open credit lines, or home ownership. 
+Loan term scatter shows that interest rate is higher for same FICO for longer loan term. 
+
+###Can we try some hclust and SVD to see what is affecting the interest rates?
+Try a heatmap of the data. 
+
+```{r cluster}
+loanMatrix<-data.matrix(cleanLoans)
+loanDist<-dist(loanMatrix)
+heatmap(loanMatrix)
+
+```
+It seems like heatmap and Svd may be good when we want to determine how close observations are to each other, or what variables make the observations 'different' from each other.
+But in this case we are interested in why a certain variable changes. 
+
+At this point it seems like FICO, loan length, and possibly state are the only factors strongly affecting interest rate. 
+
+```{r}
+#a new SVD analysis
+#make data frame all numeric...tranform back to data frame from matrix...
+cleanLoansNumeric<-data.frame(sapply(cleanLoans,as.numeric))
+svdLoan<-svd(scale(cleanLoansNumeric))
+par(mfrow=c(1,2))
+plot(svdLoan$v[,1],xlab="Column",ylab="First right singular vector",pch=19)
+varianceLoan<-svdLoan$d^2/sum(svdLoan$d^2)
+varianceLoan
+plot(varianceLoan,xlab="variable",ylab="Percent of variance explained",pch=19)
+names(cleanLoans)[which.max(svdLoan$v[,1])]
+names(cleanLoans)[which.max(svdLoan$v[,2])]
+names(cleanLoans)[which.max(svdLoan$v[,3])]
+names(cleanLoans)[which.max(svdLoan$v[,4])]
+```
+Seems like SVD is rather silly because we are not really relating it to interest rate. 
+
+###Here we need to start a multivariate regression. 
+Important Variables to Include:
+FICO Score
+Log10(Amount Requested+1)
+Loan Purpose
+Loan Length
+Debt to Income Ratio
+
+On the bubble:
+Debt to Income Ratio
+State
+Employment History
+
+```{r Multivariate Regression analysis}
+
+loanlm <-lm(cleanLoans$Interest.Rate ~  cleanLoans$Average.FICO + cleanLoans$Amount.Requested.Log + cleanLoans$Debt.To.Income.Ratio + cleanLoans$Loan.Length + cleanLoans$Loan.Purpose)
+
+summary(loanlm)
+
+loanlm2 <-lm(cleanLoans$Interest.Rate ~  cleanLoans$Average.FICO + cleanLoans$Amount.Requested.Log +  cleanLoans$Loan.Length + cleanLoans$Loan.Purpose)
+
+summary(loanlm2)
+
+loanlm3 <-lm(cleanLoans$Interest.Rate ~  cleanLoans$Average.FICO + cleanLoans$Amount.Requested.Log +  cleanLoans$Loan.Length + cleanLoans$Loan.Purpose + cleanLoans$Employment.Length)
+
+summary(loanlm3)
+
+```
+lm1 shows that debt to income ratio was not that significant. 
+lm3 shows that employment length also doesn't really appear to be significant. 
+Some factors of Loan Purpose are significant. 
+lm2 may be the best model. 
+
+#Expand on lm2 with interactions
+```{r}
+
+#check for confounder effects
+plot(cleanLoans$Amount.Requested,cleanLoans$Interest.Rate,pch=19, cex=1, col=cleanLoans$Loan.Length)
+legend(800,0.20,legend=levels(cleanLoans$Loan.Length),col=c("black","red"),pch=c(19,19),cex=c(0.6,0.6))
+plot(cleanLoans$Amount.Requested,cleanLoans$Interest.Rate,pch=19, cex=1, col=cleanLoans$Loan.Purpose)
+legend(800,0.20,legend=levels(cleanLoans$Loan.Purpose),col=c("black","red"),pch=c(19,19),cex=c(0.6,0.6))
+#Some confounder effects between Amount.Requested, loan purpose, loan length, etc. Don't really know what to do about them. 
+
+loanlm2 <-lm(cleanLoans$Interest.Rate ~  cleanLoans$Average.FICO + cleanLoans$Amount.Requested.Log +  cleanLoans$Loan.Length + cleanLoans$Loan.Purpose + cleanLoans$Average.FICO*cleanLoans$Amount.Requested)
+
+loanlm2_1 <-lm(cleanLoans$Interest.Rate ~  cleanLoans$Average.FICO + cleanLoans$Amount.Requested.Log +  cleanLoans$Loan.Length + cleanLoans$Loan.Purpose + cleanLoans$Average.FICO*cleanLoans$Amount.Requested.Log + cleanLoans$Average.FICO*cleanLoans$Loan.Length)
+summary(loanlm2_1)
+
+par(mfrow=c(2,2))
+plot(loanlm2,col="blue",pch=19)
+plot(loanlm2_1,col="blue",pch=19)
+#rsquared for 2_1 better than lm2
+
+loanlm2_2 <-lm(cleanLoans$Interest.Rate ~  cleanLoans$Average.FICO + cleanLoans$Amount.Requested.Log +  cleanLoans$Loan.Length + cleanLoans$Loan.Purpose)
+plot(loanlm2_2,col="blue",pch=19)
+summary(loanlm2_2)
+#not as good at 2_1
+
+loanlm2_3 <-lm(cleanLoans$Interest.Rate ~  cleanLoans$Average.FICO +  cleanLoans$Loan.Length + cleanLoans$Loan.Purpose)
+plot(loanlm2_3,col="blue",pch=19)
+summary(loanlm2_3)
+#no good
+
+loanlm2_4 <-lm(cleanLoans$Interest.Rate ~  cleanLoans$Amount.Requested.Log + cleanLoans$Average.FICO +  cleanLoans$Loan.Length + cleanLoans$Loan.Purpose + cleanLoans$Amount.Requested.Log*cleanLoans$Loan.Length)
+plot(loanlm2_4$residuals~cleanLoans$Interest.Rate,pch=19,col=cleanLoans$Loan.Length)
+summary(loanlm2_4)
+#Rsqared better than 2_1. 
+
+loanlm2_5 <-lm(cleanLoans$Interest.Rate ~  cleanLoans$Amount.Requested.Log + cleanLoans$Average.FICO +  cleanLoans$Loan.Length + cleanLoans$Loan.Purpose + cleanLoans$Amount.Requested.Log*cleanLoans$Loan.Length)
+plot(loanlm2_4$residuals~cleanLoans$Interest.Rate,pch=19,col=cleanLoans$Loan.Length)
+summary(loanlm2_4)
+#Rsqared better than 2_1. 
+
+loanlm2_5 <-lm(cleanLoans$Interest.Rate ~  cleanLoans$Amount.Requested.Log + cleanLoans$Average.FICO +  cleanLoans$Loan.Length + cleanLoans$Loan.Purpose + cleanLoans$Amount.Requested.Log*cleanLoans$Loan.Length + cleanLoans$Average.FICO*cleanLoans$Amount.Requested.Log)
+plot(loanlm2_5$residuals~cleanLoans$Interest.Rate,pch=19,col=cleanLoans$Loan.Length)
+summary(loanlm2_5)
+#Best one so far. !!!!GO WITH THIS ONE! TIRED OF DOING THIS!
+
+loanlm2_6 <-lm(cleanLoans$Interest.Rate ~  cleanLoans$Amount.Requested.Log + cleanLoans$Average.FICO +  cleanLoans$Loan.Length + cleanLoans$Loan.Purpose + cleanLoans$Amount.Requested.Log*cleanLoans$Loan.Length + cleanLoans$Average.FICO*cleanLoans$Amount.Requested.Log+ cleanLoans$Amount.Requested.Log*cleanLoans$Loan.Purpose)
+plot(loanlm2_6$residuals~cleanLoans$Interest.Rate,pch=19,col=cleanLoans$Loan.Length)
+summary(loanlm2_6)
+#slightly better but way more complicated. 
+
+```
+
+
+
+
+#Generate expository plots. 
+```{r}
+
+par(mfrow=c(1,2))
+
+plot(cleanLoans$Interest.Rate~cleanLoans$Amount.Requested.Log,col=cleanLoans$Loan.Length,pch=19,xlab="log10(Amount Requested+1)",ylab="Interest Rate")
+title(main="Interest Rate vs log(Amount Requested)",sub="FICO=700",cex.sub=0.75,cex.main=0.9)
+abline(c(loanlm2_5$coeff[1]+loanlm2_5$coeff[3]*800,loanlm2_5$coeff[2]+loanlm2_5$coeff[19]*800),col="grey",lwd=3)
+abline(c(loanlm2_5$coeff[1]+loanlm2_5$coeff[4]+loanlm2_5$coeff[3]*800,loanlm2_5$coeff[2]+loanlm2_5$coeff[18]+loanlm2_5$coeff[19]*800),col="pink",lwd=3)
+legend(3.0,0.25,legend=levels(cleanLoans$Loan.Length),col=c("black","red"),pch=c(19,19),cex=c(0.6,0.6))
+
+plot(cleanLoans$Interest.Rate~cleanLoans$Amount.Requested.Log,col=cleanLoans$Loan.Length,pch=19,xlab="log10(Amount Requested+1)",ylab="Interest Rate")
+title(main="Interest Rate vs log(Amount Requested)",sub="FICO=800",cex.sub=0.75,cex.main=0.9)
+abline(c(loanlm2_5$coeff[1]+loanlm2_5$coeff[3]*800,loanlm2_5$coeff[2]+loanlm2_5$coeff[19]*800),col="grey",lwd=3)
+abline(c(loanlm2_5$coeff[1]+loanlm2_5$coeff[4]+loanlm2_5$coeff[3]*800,loanlm2_5$coeff[2]+loanlm2_5$coeff[18]+loanlm2_5$coeff[19]*800),col="pink",lwd=3)
+legend(3.0,0.25,legend=levels(cleanLoans$Loan.Length),col=c("black","red"),pch=c(19,19),cex=c(0.6,0.6),cex=)
+
+par(mfrow=c(1,1))
+plot(cleanLoans$Interest.Rate~cleanLoans$Average.FICO,col=cleanLoans$Loan.Length,pch=19,xlab="FICO Score",ylab = "Interest Rate")
+abline(c(loanlm2_5$coeff[1]+loanlm2_5$coeff[2]*log10(6000+1),loanlm2_5$coeff[3]+loanlm2_5$coeff[19]*log10(6000+1)),col="grey",lwd=5,lty=3)
+abline(c(loanlm2_5$coeff[1]+loanlm2_5$coeff[2]*log10(6000+1)+loanlm2_5$coeff[4]+loanlm2_5$coeff[18]*log10(6000+1),loanlm2_5$coeff[3]+loanlm2_5$coeff[19]*log10(6000+1)),col="pink",lwd=5,lty=3)
+abline(c(loanlm2_5$coeff[1]+loanlm2_5$coeff[2]*log10(10000+1),loanlm2_5$coeff[3]+loanlm2_5$coeff[19]*log10(10000+1)),col="grey",lwd=5,lty=1)
+abline(c(loanlm2_5$coeff[1]+loanlm2_5$coeff[2]*log10(10000+1)+loanlm2_5$coeff[4]+loanlm2_5$coeff[18]*log10(10000+1),loanlm2_5$coeff[3]+loanlm2_5$coeff[19]*log10(10000+1)),col="pink",lwd=5,lty=1)
+abline(c(loanlm2_5$coeff[1]+loanlm2_5$coeff[2]*log10(17000+1),loanlm2_5$coeff[3]+loanlm2_5$coeff[19]*log10(17000+1)),col="grey",lwd=5,lty=2)
+abline(c(loanlm2_5$coeff[1]+loanlm2_5$coeff[2]*log10(17000+1)+loanlm2_5$coeff[4]+loanlm2_5$coeff[18]*log10(17000+1),loanlm2_5$coeff[3]+loanlm2_5$coeff[19]*log10(17000+1)),col="pink",lwd=5,lty=2)
+legend(765,0.25,legend=levels(cleanLoans$Loan.Length),col=c("black","red"),pch=c(19,19),cex=c(0.7,0.7))
+legend(795,0.25,legend=c("$6000, 36mo","$6000, 60mo","$10000, 36mo","$10000, 60mo","$17000, 36mo","$17000, 60mo"),lty=c(3,1,2,3,2,1),col=c("grey","pink","grey","pink","grey","pink"),cex=c(0.7,0.7))
+title(main="Interest Rate vs FICO Score and Amt Requested")
+
+plot(loanlm2_5$residuals~cleanLoans$Interest.Rate,pch=19,col=cleanLoans$Loan.Length,xlab="Interest Rate",ylab="Residuals")
+legend(0.19,0.09,legend=levels(cleanLoans$Loan.Length),col=c("black","red"),pch=c(19,19),cex=c(0.6,0.6))
+title(main="Residuals vs Interest Rate")
+
+
+```
+
+#FINAL FIGURE
+```{r}
+png(file="../Figures/multipleAmount v Fico.png",height=1200,width=(2*1200))
+par(mfrow=c(1,1))
+plot(cleanLoans$Interest.Rate~cleanLoans$Average.FICO,col=cleanLoans$Loan.Length,pch=19,xlab="FICO Score",ylab = "Interest Rate")
+abline(c(loanlm2_5$coeff[1]+loanlm2_5$coeff[2]*log10(6000+1),loanlm2_5$coeff[3]+loanlm2_5$coeff[19]*log10(6000+1)),col="grey",lwd=5,lty=3)
+abline(c(loanlm2_5$coeff[1]+loanlm2_5$coeff[2]*log10(6000+1)+loanlm2_5$coeff[4]+loanlm2_5$coeff[18]*log10(6000+1),loanlm2_5$coeff[3]+loanlm2_5$coeff[19]*log10(6000+1)),col="pink",lwd=5,lty=3)
+abline(c(loanlm2_5$coeff[1]+loanlm2_5$coeff[2]*log10(10000+1),loanlm2_5$coeff[3]+loanlm2_5$coeff[19]*log10(10000+1)),col="grey",lwd=5,lty=1)
+abline(c(loanlm2_5$coeff[1]+loanlm2_5$coeff[2]*log10(10000+1)+loanlm2_5$coeff[4]+loanlm2_5$coeff[18]*log10(10000+1),loanlm2_5$coeff[3]+loanlm2_5$coeff[19]*log10(10000+1)),col="pink",lwd=5,lty=1)
+abline(c(loanlm2_5$coeff[1]+loanlm2_5$coeff[2]*log10(17000+1),loanlm2_5$coeff[3]+loanlm2_5$coeff[19]*log10(17000+1)),col="grey",lwd=5,lty=2)
+abline(c(loanlm2_5$coeff[1]+loanlm2_5$coeff[2]*log10(17000+1)+loanlm2_5$coeff[4]+loanlm2_5$coeff[18]*log10(17000+1),loanlm2_5$coeff[3]+loanlm2_5$coeff[19]*log10(17000+1)),col="pink",lwd=5,lty=2)
+legend(765,0.25,legend=levels(cleanLoans$Loan.Length),col=c("black","red"),pch=c(19,19),cex=c(0.7,0.7))
+legend(795,0.25,legend=c("$6000, 36mo","$6000, 60mo","$10000, 36mo","$10000, 60mo","$17000, 36mo","$17000, 60mo"),lty=c(3,3,1,1,2,2),col=c("grey","pink","grey","pink","grey","pink"),cex=c(0.7,0.7))
+title(main="Interest Rate vs FICO Score and Amt Requested")
+dev.off()
+
+```
+
